@@ -1,0 +1,461 @@
+---
+title: "CSCI/DASC 6020: Project"
+author: "Umair Mallick, Aamir Mallick, Guavis Siramata"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+number-sections: true
+number-depth: 3
+format:
+  html:
+    toc: true
+    toc-location: right
+    number-sections: true
+    number-depth: 3
+    html-math-method: katex
+    embed-resources: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+# Exploratory Data Analysis
+
+## Data set
+
+Churn_Data(\[Kaggle.com\]([https://www.kaggle.com](https://www.kaggle.com/datasets/barun2104/telecom-churn )
+
+```{r}
+setwd("C:\\Users\\Malik\\Documents\\ECU\\CSCI-6020 ML\\Project")
+data <- read.csv("CustomerChurns.csv", header = TRUE, sep = ",")
+
+head(data)
+```
+
+```{r}
+dim(data)
+```
+
+```{r}
+str(data)
+```
+
+# The Data Quality Report
+
+Document the data quality report in two separate tables, one for the continuous features and another for the categorical features. Use the table format discussed in the class.
+
+## Continuous Features
+
+Libraries used
+
+```{r}
+# for formatting percentage values
+library(scales)
+
+# for drawing scatterplot matrices
+library(ggplot2)
+library(GGally)
+library(psych)
+
+# for filtering data
+library(dplyr)
+library(tidyr)
+# tibble requires tidyverse package
+library(tibble)
+
+# for doing string operations (string replacement)
+library(stringr)
+
+# for doing range normalization
+library(caret)
+
+# for performing binning
+library(classInt)
+
+install.packages("VIM")
+library(VIM)
+
+```
+
+```{r}
+summary(data)
+```
+
+Gather aggregates for each continuous feature:
+
+```{r}
+numRowsOfDataTotal <- nrow(data)
+print(numRowsOfDataTotal)
+```
+```{r}
+#Removing unnecessary data points such as 'Count','Zip Code','Lat Long','Churn Reason','Country','State', 'Latitude' and 'Longitude' which are not relevant
+data <- data %>% select(-'Count', -'Country', -'State', -'Zip.Code', -'Lat.Long', -'Latitude', -'Longitude', -'Churn.Value', -'Churn.Reason')
+summary(data)
+
+```
+
+
+```{r}
+
+continuousFeatureNames <- c("Tenure.Months","Monthly.Charges","Total.Charges","Churn.Score","CLTV")
+
+continuousFeaturesDf <- 
+  data.frame(
+     Tenure.Months <- data %>% select(Tenure.Months),
+     Monthly.Charges <- data %>% select(Monthly.Charges),
+     Total.Charges <- data %>% select(Total.Charges),
+     Churn.Score <- data %>% select(Churn.Score),
+     CLTV <- data %>% select(CLTV))
+
+continuousFeatureCounts <- c(length(!is.na(data$Tenure.Months)), length(is.na(data$Monthly.Charges)), length(is.na(data$Total.Charges)), length(is.na(data$Churn.Score)), length(is.na(data$CLTV)))
+
+
+print(continuousFeatureCounts)
+     
+     
+```
+
+### Checking for Missing data
+```{r}
+sapply(data, function(x) sum(is.na(x)))
+
+```
+```{r}
+#We have 11 missing data in total charges, either we can remove the rows with missing total charges or use other techniques such as imputation or nearest neighbor.
+
+#First lets explore imputation technique based on related feature such as Tenure.Month & Monthly.Charges
+tenureXMonth <- data$Tenure.Months[2] * data$Monthly.Charges[2]
+print(paste('Before Imputation ', tenureXMonth))
+print(paste('After Imputation', data$Total.Charges[2]))
+
+#Seems like there's some discrepancies in the above logic, lets switch to K-NN technique
+
+#1- Removing missing data
+dataMissing <- data %>% select_if(is.numeric)
+#Assuming k=3
+dataK <- kNN(dataMissing, k = 3)
+#Comparing Total charges before and after imputation
+comparision <- data.frame( Before = data$Total.Charges[2230:2240],
+                          After = dataK$Total.Charges[2230:2240])
+print(comparision)
+#Assuming k=5
+dataK <- kNN(dataMissing, k = 5)
+#Comparing Total charges before and after imputation
+comparision <- data.frame( Before = data$Total.Charges[2230:2240],
+                          After = dataK$Total.Charges[2230:2240])
+print(comparision)
+
+#Checking missing values are 0
+sum(is.na(dataK$Total.Charges))
+
+#Adding K-NN data to our dataset
+data$Total.Charges <- dataK$Total.Charges
+```
+
+
+```{r}
+
+continuousFeatureMissingPercents <- c((numRowsOfDataTotal - continuousFeatureCounts[1]) / numRowsOfDataTotal, (numRowsOfDataTotal - continuousFeatureCounts[2]) / numRowsOfDataTotal, (numRowsOfDataTotal - continuousFeatureCounts[3]) / numRowsOfDataTotal, (numRowsOfDataTotal - continuousFeatureCounts[4]) / numRowsOfDataTotal, (numRowsOfDataTotal - continuousFeatureCounts[5]) / numRowsOfDataTotal)
+
+continuousFeatureCardinalities <- c(length(unique(data$Tenure.Months)),length(unique(data$Monthly.Charges)),length(unique(data$Total.Charges)),length(unique(data$Churn.Score)),length(unique(data$CLTV)))
+
+continuousFeatureMinimums <- c(min(data$Tenure.Months),min(data$Monthly.Charges),min(data$Total.Charges),min(data$Churn.Score),min(data$CLTV))
+
+continuousFeature1stQuartiles <- c(quantile(data$Tenure.Months,0.25),quantile(data$Monthly.Charges,0.25),quantile(data$Total.Charges,0.25),quantile(data$Churn.Score,0.25),quantile(data$CLTV,0.25))
+
+continuousFeatureMeans <- c(mean(data$Tenure.Months),mean(data$Monthly.Charges),mean(data$Total.Charges),mean(data$Churn.Score),mean(data$CLTV))
+
+continuousFeatureMedians <- c(median(data$Tenure.Months),median(data$Monthly.Charges),median(data$Total.Charges),median(data$Churn.Score),median(data$CLTV))
+
+continuousFeature3rdQuartiles <- c(quantile(data$Tenure.Months,0.75),quantile(data$Monthly.Charges,0.75),quantile(data$Total.Charges,0.75),quantile(data$Churn.Score,0.75),quantile(data$CLTV,0.75))
+
+continuousFeatureMaximums <- c(max(data$Tenure.Months),max(data$Monthly.Charges),max(data$Total.Charges),max(data$Churn.Score),max(data$CLTV))
+
+continuousFeatureStDevs <- c(sd(data$Tenure.Months),sd(data$Monthly.Charges),sd(data$Total.Charges),sd(data$Churn.Score),sd(data$CLTV))
+```
+
+Create Continuous Feature Data Quality Table:
+
+```{r}
+continuousFeatureQualityReportTable <- data.frame(
+  Feature=continuousFeatureNames,
+  Count=continuousFeatureCounts,
+  "Missing %"=continuousFeatureMissingPercents,
+  Cardinality=continuousFeatureCardinalities,
+  Minimum=continuousFeatureMinimums,
+  "First Quartile"=continuousFeature1stQuartiles,
+  Mean=continuousFeatureMeans,
+  Median=continuousFeatureMedians,
+  "Third Quartile"=continuousFeature3rdQuartiles,
+  Maximum=continuousFeatureMaximums,
+  StDev=continuousFeatureStDevs
+  )
+
+print(continuousFeatureQualityReportTable)
+
+```
+
+## Categorical Features
+
+Gather aggregates for each categorical feature:
+
+```{r}
+categoricalFeatureNames <- 
+  c(
+    "City",
+    "Gender",
+    "Senior.Citizen",
+    "Partner",
+    "Dependents",
+    "Phone.Service",
+    "Multiple.Lines",
+    "Internet.Service",
+    "Online.Security",
+    "Online.Backup",
+    "Tech.Support",
+    "Streaming.TV",
+    "Streaming.Movies",
+    "Contract",
+    "Paperless.Billing",
+    "Payment.Method",
+    "Churn.Label")
+
+categoricalFeaturesDf <-
+  data.frame(
+    City=data %>% select(City),
+    Gender=data %>% select(Gender),
+    Senior.Citizen=data %>% select(Senior.Citizen),
+    Partner=data %>% select(Partner),
+    Dependents=data %>% select(Dependents),
+    Phone.Service=data %>% select(Phone.Service),
+    Multiple.Lines=data %>% select(Multiple.Lines),
+    Internet.Service=data %>% select(Internet.Service),
+    Online.Security=data %>% select(Online.Security),
+    Online.Backup=data %>% select(Online.Backup),
+    Tech.Support=data %>% select(Tech.Support),
+    Streaming.TV=data %>% select(Streaming.TV),
+    Streaming.Movies=data %>% select(Streaming.Movies),
+    Contract=data %>% select(Contract),
+    Paperless.Billing=data %>% select(Paperless.Billing),
+    Payment.Method=data %>% select(Payment.Method),
+    Churn.Label=data %>% select(Churn.Label)
+  )
+
+categoricalFeatureCounts <- 
+  c(
+    length(!is.na(data$City)), 
+    length(!is.na(data$Gender)),
+    length(!is.na(data$Senior.Citizen)),
+    length(!is.na(data$Partner)),
+    length(!is.na(data$Dependents)),
+    length(!is.na(data$Phone.Service)),
+    length(!is.na(data$Multiple.Lines)), 
+    length(!is.na(data$Internet.Service)),
+    length(!is.na(data$Online.Security)),
+    length(!is.na(data$Online.Backup)),
+    length(!is.na(data$Tech.Support)),
+    length(!is.na(data$Streaming.TV)),
+    length(!is.na(data$Streaming.Movies)),
+    length(!is.na(data$Contract)),
+    length(!is.na(data$Paperless.Billing)),
+    length(!is.na(data$Payment.Method)),
+    length(!is.na(data$Churn.Label)))
+
+categoricalFeatureMissingPercents <- 
+  c(
+    (numRowsOfDataTotal - categoricalFeatureCounts[1]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[2]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[3]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[4]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[5]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[6]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[7]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[8]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[9]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[10]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[11]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[12]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[13]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[14]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[15]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[16]) / numRowsOfDataTotal,
+    (numRowsOfDataTotal - categoricalFeatureCounts[17]) / numRowsOfDataTotal)
+
+categoricalFeatureCardinalities <- 
+  c(
+    length(unique(data$City)), 
+    length(unique(data$Gender)),
+    length(unique(data$Senior.Citizen)),
+    length(unique(data$Partner)),
+    length(unique(data$Dependents)),
+    length(unique(data$Phone.Service)),
+    length(unique(data$Multiple.Lines)), 
+    length(unique(data$Internet.Service)),
+    length(unique(data$Online.Security)),
+    length(unique(data$Online.Backup)),
+    length(unique(data$Tech.Support)),
+    length(unique(data$Streaming.TV)),
+    length(unique(data$Streaming.Movies)),
+    length(unique(data$Contract)),
+    length(unique(data$Paperless.Billing)),
+    length(unique(data$Payment.Method)),
+    length(unique(data$Churn.Label)))
+
+# define mode() functions
+mode = function(d) {
+  
+  # calculate mode of marks  
+  return(names(sort(-table(d)))[1])
+}
+
+second_mode = function(d) {
+  
+  # calculate mode of marks  
+  return(names(sort(-table(d)))[2])
+}
+
+categoricalFeatureModes <- 
+  c(
+    mode(data$City), 
+    mode(data$Gender),
+    mode(data$Senior.Citizen),
+    mode(data$Partner),
+    mode(data$Dependents),
+    mode(data$Phone.Service),
+    mode(data$Multiple.Lines), 
+    mode(data$Internet.Service),
+    mode(data$Online.Security),
+    mode(data$Online.Backup),
+    mode(data$Tech.Support),
+    mode(data$Streaming.TV),
+    mode(data$Streaming.Movies),
+    mode(data$Contract),
+    mode(data$Paperless.Billing),
+    mode(data$Payment.Method),
+    mode(data$Churn.Label))
+
+categoricalFeatureModeFrequencies <- 
+  c(
+    length(which(data$City == mode(data$City))), 
+    length(which(data$Gender == mode(data$Gender))),
+    length(which(data$Senior.Citizen == mode(data$Senior.Citizen))),
+    length(which(data$Partner == mode(data$Partner))),
+    length(which(data$Dependents == mode(data$Dependents))),
+    length(which(data$Phone.Service == mode(data$Phone.Service))),
+    length(which(data$Multiple.Lines == mode(data$Multiple.Lines))), 
+    length(which(data$Internet.Service == mode(data$Internet.Service))),
+    length(which(data$Online.Security == mode(data$Online.Security))),
+    length(which(data$Online.Backup == mode(data$Online.Backup))),
+    length(which(data$Tech.Support == mode(data$Tech.Support))),
+    length(which(data$Streaming.TV == mode(data$Streaming.TV))),
+    length(which(data$Streaming.Movies == mode(data$Streaming.Movies))),
+    length(which(data$Contract == mode(data$Contract))),
+    length(which(data$Paperless.Billing == mode(data$Paperless.Billing))),
+    length(which(data$Payment.Method == mode(data$Payment.Method))),
+    length(which(data$Churn.Label == mode(data$Churn.Label))))
+
+categoricalFeatureModePercents <- 
+  c(
+    percent(categoricalFeatureModeFrequencies[1] / categoricalFeatureCounts[1]),
+    percent(categoricalFeatureModeFrequencies[2] / categoricalFeatureCounts[2]),
+    percent(categoricalFeatureModeFrequencies[3] / categoricalFeatureCounts[3]),
+    percent(categoricalFeatureModeFrequencies[4] / categoricalFeatureCounts[4]),
+    percent(categoricalFeatureModeFrequencies[5] / categoricalFeatureCounts[5]),
+    percent(categoricalFeatureModeFrequencies[6] / categoricalFeatureCounts[6]),
+    percent(categoricalFeatureModeFrequencies[7] / categoricalFeatureCounts[7]),
+    percent(categoricalFeatureModeFrequencies[8] / categoricalFeatureCounts[8]),
+    percent(categoricalFeatureModeFrequencies[9] / categoricalFeatureCounts[9]),
+    percent(categoricalFeatureModeFrequencies[10] / categoricalFeatureCounts[10]),
+    percent(categoricalFeatureModeFrequencies[11] / categoricalFeatureCounts[11]),
+    percent(categoricalFeatureModeFrequencies[12] / categoricalFeatureCounts[12]),
+    percent(categoricalFeatureModeFrequencies[13] / categoricalFeatureCounts[13]),
+    percent(categoricalFeatureModeFrequencies[14] / categoricalFeatureCounts[14]),
+    percent(categoricalFeatureModeFrequencies[15] / categoricalFeatureCounts[15]),
+    percent(categoricalFeatureModeFrequencies[16] / categoricalFeatureCounts[16]),
+    percent(categoricalFeatureModeFrequencies[17] / categoricalFeatureCounts[17]))
+    
+    print(categoricalFeatureModePercents)
+
+categoricalFeature2ndModes <- 
+  c(
+    second_mode(data$City), 
+    second_mode(data$Gender),
+    second_mode(data$Senior.Citizen),
+    second_mode(data$Partner),
+    second_mode(data$Dependents),
+    second_mode(data$Phone.Service),
+    second_mode(data$Multiple.Lines), 
+    second_mode(data$Internet.Service),
+    second_mode(data$Online.Security),
+    second_mode(data$Online.Backup),
+    second_mode(data$Tech.Support),
+    second_mode(data$Streaming.TV),
+    second_mode(data$Streaming.Movies),
+    second_mode(data$Contract),
+    second_mode(data$Paperless.Billing),
+    second_mode(data$Payment.Method),
+    second_mode(data$Churn.Label))
+
+categoricalFeature2ndModeFrequencies <- 
+  c(
+    length(which(data$City == second_mode(data$City))), 
+    length(which(data$Gender == second_mode(data$Gender))),
+    length(which(data$Senior.Citizen == second_mode(data$Senior.Citizen))),
+    length(which(data$Partner == second_mode(data$Partner))),
+    length(which(data$Dependents == second_mode(data$Dependents))),
+    length(which(data$Phone.Service == second_mode(data$Phone.Service))),
+    length(which(data$Multiple.Lines == second_mode(data$Multiple.Lines))), 
+    length(which(data$Internet.Service == mode(data$Internet.Service))),
+    length(which(data$Online.Security == second_mode(data$Online.Security))),
+    length(which(data$Online.Backup == second_mode(data$Online.Backup))),
+    length(which(data$Tech.Support == second_mode(data$Tech.Support))),
+    length(which(data$Streaming.TV == second_mode(data$Streaming.TV))),
+    length(which(data$Streaming.Movies == second_mode(data$Streaming.Movies))),
+    length(which(data$Contract == second_mode(data$Contract))),
+    length(which(data$Paperless.Billing == second_mode(data$Paperless.Billing))),
+    length(which(data$Payment.Method == second_mode(data$Payment.Method))),
+    length(which(data$Churn.Label == second_mode(data$Churn.Label))))
+
+
+categoricalFeature2ndModePercents <- 
+  c(
+    percent(categoricalFeature2ndModeFrequencies[1] / categoricalFeatureCounts[1]),
+    percent(categoricalFeature2ndModeFrequencies[2] / categoricalFeatureCounts[2]),
+    percent(categoricalFeature2ndModeFrequencies[3] / categoricalFeatureCounts[3]),
+    percent(categoricalFeature2ndModeFrequencies[4] / categoricalFeatureCounts[4]),
+    percent(categoricalFeature2ndModeFrequencies[5] / categoricalFeatureCounts[5]),
+    percent(categoricalFeature2ndModeFrequencies[6] / categoricalFeatureCounts[6]),
+    percent(categoricalFeature2ndModeFrequencies[7] / categoricalFeatureCounts[7]),
+    percent(categoricalFeature2ndModeFrequencies[8] / categoricalFeatureCounts[8]),
+    percent(categoricalFeature2ndModeFrequencies[9] / categoricalFeatureCounts[9]),
+    percent(categoricalFeature2ndModeFrequencies[10] / categoricalFeatureCounts[10]),
+    percent(categoricalFeature2ndModeFrequencies[11] / categoricalFeatureCounts[11]),
+    percent(categoricalFeature2ndModeFrequencies[12] / categoricalFeatureCounts[12]),
+    percent(categoricalFeature2ndModeFrequencies[13] / categoricalFeatureCounts[13]),
+    percent(categoricalFeature2ndModeFrequencies[14] / categoricalFeatureCounts[14]),
+    percent(categoricalFeature2ndModeFrequencies[15] / categoricalFeatureCounts[15]),
+    percent(categoricalFeature2ndModeFrequencies[16] / categoricalFeatureCounts[16]),
+    percent(categoricalFeature2ndModeFrequencies[17] / categoricalFeatureCounts[17]))
+
+    print(categoricalFeature2ndModePercents)
+  
+    
+```
+
+Create Categorical Feature Data Quality Table:
+
+```{r}
+categoricalFeatureQualityReportTable <- data.frame(
+  Feature=categoricalFeatureNames,
+  Count=categoricalFeatureCounts,
+  "Missing %"=categoricalFeatureMissingPercents,
+  Cardinality=categoricalFeatureCardinalities,
+  Mode=categoricalFeatureModes,
+  "Mode Freq"=categoricalFeatureModeFrequencies,
+  "Mode %"=categoricalFeatureModePercents,
+  "Second Mode"=categoricalFeature2ndModes,
+  "Second Mode Freq"=categoricalFeature2ndModeFrequencies,
+  "Second Mode %"=categoricalFeature2ndModePercents
+  )
+
+print(categoricalFeatureQualityReportTable)
+```
